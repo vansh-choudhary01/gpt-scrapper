@@ -1,65 +1,77 @@
 #!/bin/bash
 set -e
 
+DOMAIN="chat.naaspeeti.xyz"
+
 echo "==> Updating system..."
 sudo apt-get update -y && sudo apt-get upgrade -y
 
-echo "==> Installing Docker & Git..."
-sudo apt-get install -y docker.io docker-compose git
+echo "==> Installing dependencies..."
+sudo apt-get install -y docker.io docker-compose git curl certbot
 
-echo "==> Starting Docker..."
 sudo systemctl start docker
 sudo systemctl enable docker
 
-echo "==> Cloning repository..."
+echo "==> Cloning repo..."
 cd ~
 
 if [ ! -d "gpt-scrapper" ]; then
   git clone https://github.com/vansh-choudhary01/gpt-scrapper.git
-else
-  echo "Repo already exists, pulling latest..."
-  cd gpt-scrapper && git pull
-  cd ..
 fi
 
 cd gpt-scrapper
 
-echo ""
-echo "=========================================="
-echo "⚠️  IMPORTANT MANUAL STEP"
-echo ""
-echo "Copy your session file BEFORE starting:"
-echo ""
-echo "scp -i key.pem auth/session.json ubuntu@<EC2_IP>:~/gpt-scrapper/auth/"
-echo ""
-echo "Then press ENTER to continue..."
-echo "=========================================="
-read
-
-echo "==> Building & starting containers..."
-sudo docker-compose up -d --build
+echo "==> Creating certbot directories..."
+mkdir -p certbot/www
+mkdir -p certbot/conf
 
 echo ""
-echo "==> Waiting for containers..."
+echo "⚠️ Make sure domain points to this server:"
+echo "chat.naaspeeti.xyz → $(curl -s ifconfig.me)"
+echo ""
+read -p "Press ENTER to continue if DNS is correct..."
+
+# ========================
+# START NGINX TEMP (HTTP)
+# ========================
+
+echo "==> Starting nginx for SSL challenge..."
+sudo docker-compose up -d nginx
+
 sleep 5
 
-echo "==> Container status:"
-sudo docker ps
+# ========================
+# RUN CERTBOT
+# ========================
+
+echo "==> Requesting SSL certificate..."
+
+sudo certbot certonly --webroot \
+  -w ./certbot/www \
+  -d $DOMAIN \
+  --email your@email.com \
+  --agree-tos \
+  --no-eff-email
+
+echo "==> Restarting full stack..."
+sudo docker-compose down
+sudo docker-compose up -d --build
+
+# ========================
+# SESSION STEP
+# ========================
+
+echo ""
+echo "Copy session file:"
+echo "scp -i key.pem auth/session.json ubuntu@$(curl -s ifconfig.me):~/gpt-scrapper/auth/"
+read -p "Press ENTER after copying..."
+
+sudo docker-compose restart
 
 echo ""
 echo "=========================================="
-echo "✅ DEPLOYMENT COMPLETE"
+echo "✅ HTTPS READY 🚀"
 echo ""
-echo "🌐 Test API:"
+echo "🌐 https://$DOMAIN/chat"
 echo ""
-echo "curl -X POST http://<EC2_IP>/chat \\"
-echo "  -H 'Content-Type: application/json' \\"
-echo "  -d '{\"prompt\":\"hello\"}'"
-echo ""
-echo "📊 Logs:"
-echo "docker logs gpt-app"
-echo "docker logs gpt-nginx"
-echo ""
-echo "🔄 Restart:"
-echo "docker-compose restart"
 echo "=========================================="
