@@ -1,6 +1,9 @@
-const { chromium } = require("playwright");
+const { chromium } = require("playwright-extra");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 const path = require("path");
 const fs = require("fs");
+
+chromium.use(StealthPlugin());
 
 const SESSION_PATH = path.resolve(__dirname, "../auth/session.json");
 const CHATGPT_URL = "https://chatgpt.com";
@@ -33,21 +36,30 @@ async function sendMessage(prompt) {
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",    // important for EC2/Docker
+      "--disable-dev-shm-usage",
       "--disable-gpu",
-      "--single-process",           // helps on low-memory instances
+      "--single-process",
+      "--disable-blink-features=AutomationControlled",
     ],
   });
 
   const context = await browser.newContext({
     storageState: SESSION_PATH,
+    // Match same UA used when saving the session
     userAgent:
-      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     viewport: { width: 1280, height: 800 },
+    locale: "en-US",
+    timezoneId: "America/New_York",
   });
 
   const page = await context.newPage();
+
+  // Belt-and-suspenders: remove webdriver flag even in headless mode
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
 
   try {
     // ── 1. Navigate to ChatGPT ──────────────────────────────────────────────
