@@ -1,0 +1,19 @@
+{
+  "name": "chatgpt-scraper",
+  "version": "1.0.0",
+  "description": "ChatGPT browser automation backend",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "save-session": "node scripts/save-session.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "playwright": "^1.44.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
