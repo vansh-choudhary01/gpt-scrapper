@@ -195,8 +195,8 @@ async function sendMessage(prompt) {
     }
 
     // 📸 Screenshot for debugging
-    // await page.screenshot({ path: "debug_after_send.png" });
-    // log("📸 Screenshot saved: debug_after_send.png");
+    await page.screenshot({ path: "debug_after_send.png" });
+    log("📸 Screenshot saved: debug_after_send.png");
 
     // ─────────────── VERIFY MESSAGE SENT ───────────────
     const userMsgCount = await page.$$eval(
@@ -231,8 +231,8 @@ async function sendMessage(prompt) {
   } catch (err) {
     log("💥 ERROR:", err.message);
 
-    // await page.screenshot({ path: "error.png" });
-    // log("📸 Error screenshot saved: error.png");
+    await page.screenshot({ path: "error.png" });
+    log("📸 Error screenshot saved: error.png");
 
     throw err;
   } finally {

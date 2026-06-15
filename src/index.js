@@ -1,6 +1,9 @@
 require("dotenv").config();
 const express = require("express");
 const { sendMessage } = require("./chatgpt");
+const path = require("path");
+const { chromium } = require("playwright-extra");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 
 const app = express();
 app.use(express.json());
@@ -56,3 +59,23 @@ app.listen(PORT, () => {
 //     await browser.close();
 //   });
 // })();
+
+setInterval(async () => {
+  try {
+    const SESSION_PATH = path.resolve(__dirname, "../auth/session.json");
+    const browser = await chromium.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+
+    const context = await browser.newContext({
+      storageState: SESSION_PATH,
+    });
+    const page = await context.newPage();
+    await page.goto("https://chatgpt.com/");
+    console.log("🟢 Session refreshed");
+    await page.close();
+  } catch (e) {
+    console.log("⚠️ Keep-alive failed: ", e);
+  }
+}, 5 * 60 * 1000); // every 5 min
