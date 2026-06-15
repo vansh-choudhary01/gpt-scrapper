@@ -22,7 +22,8 @@ if (!fs.existsSync(COOKIES_IN)) {
   process.exit(1);
 }
 
-const raw = JSON.parse(fs.readFileSync(COOKIES_IN, "utf8"));
+const parsed = JSON.parse(fs.readFileSync(COOKIES_IN, "utf8"));
+const raw = Array.isArray(parsed) ? parsed : (parsed.data ?? parsed.cookies ?? []);
 
 // Cookie-Editor format → Playwright storageState format
 const converted = raw.map((c) => ({

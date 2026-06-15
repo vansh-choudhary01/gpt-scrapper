@@ -38,3 +38,21 @@ app.post("/chat", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`ChatGPT scraper backend running on port ${PORT}`);
 });
+
+// const { chromium } = require("playwright");
+// const fs = require("fs");
+
+// (async () => {
+//   const browser = await chromium.launch({ headless: false });
+//   const context = await browser.newContext();
+//   const page = await context.newPage();
+
+//   await page.goto("https://chatgpt.com");
+
+//   console.log("👉 Login manually, then press ENTER here...");
+//   process.stdin.once("data", async () => {
+//     await context.storageState({ path: "session.json" });
+//     console.log("✅ Session saved!");
+//     await browser.close();
+//   });
+// })();

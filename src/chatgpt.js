@@ -8,174 +8,234 @@ chromium.use(StealthPlugin());
 const SESSION_PATH = path.resolve(__dirname, "../auth/session.json");
 const CHATGPT_URL = "https://chatgpt.com";
 
-// Timeouts (ms)
-const NAVIGATION_TIMEOUT = 30_000;
-const INPUT_TIMEOUT = 15_000;
-const RESPONSE_TIMEOUT = 120_000; // ChatGPT can be slow
-const RESPONSE_IDLE_MS = 3_000;   // Wait this long with no DOM changes before assuming done
+// Timeouts
+const NAVIGATION_TIMEOUT = 30000;
+const INPUT_TIMEOUT = 20000;
+const RESPONSE_TIMEOUT = 120000;
+
+function log(...args) {
+  console.log(`[${new Date().toISOString()}]`, ...args);
+}
 
 function ensureSessionExists() {
   if (!fs.existsSync(SESSION_PATH)) {
-    throw new Error(
-      `Session file not found at ${SESSION_PATH}. ` +
-      `Run: npm run save-session  to log in and save your session.`
-    );
+    throw new Error(`Session file missing: ${SESSION_PATH}`);
   }
 }
 
-/**
- * Sends a prompt to ChatGPT via browser automation and returns the response text.
- * @param {string} prompt
- * @returns {Promise<string>}
- */
 async function sendMessage(prompt) {
   ensureSessionExists();
 
+  log("🚀 Launching browser...");
+
   const browser = await chromium.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--single-process",
-      "--disable-blink-features=AutomationControlled",
-    ],
+    headless: false,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
   const context = await browser.newContext({
     storageState: SESSION_PATH,
-    // Match same UA used when saving the session
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    viewport: { width: 1280, height: 800 },
-    locale: "en-US",
-    timezoneId: "America/New_York",
   });
 
   const page = await context.newPage();
 
-  // Belt-and-suspenders: remove webdriver flag even in headless mode
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  // 🔍 GLOBAL DEBUG LISTENERS
+  page.on("console", (msg) => log("🧠 Browser console:", msg.text()));
+  page.on("requestfailed", (req) =>
+    log("❌ Request failed:", req.url())
+  );
+  page.on("framenavigated", (frame) => {
+    if (frame === page.mainFrame()) {
+      log("🔄 Navigated to:", frame.url());
+    }
   });
+  page.on("close", () => log("❌ Page closed!"));
 
   try {
-    // ── 1. Navigate to ChatGPT ──────────────────────────────────────────────
+    // ─────────────── NAVIGATE ───────────────
+    log("🌍 Opening ChatGPT...");
     await page.goto(CHATGPT_URL, {
       waitUntil: "domcontentloaded",
       timeout: NAVIGATION_TIMEOUT,
     });
 
-    // If redirected to login page, session has expired
-    const currentUrl = page.url();
-    if (currentUrl.includes("/auth/login") || currentUrl.includes("login")) {
-      throw new Error(
-        "Session expired or invalid. Re-run: npm run save-session"
-      );
+    await page.waitForLoadState("networkidle");
+    log("✅ Page loaded:", page.url());
+
+    if (page.url().includes("login")) {
+      throw new Error("❌ Not logged in (session expired)");
     }
 
-    // ── 2. Wait for the input box ───────────────────────────────────────────
-    // ChatGPT uses a contenteditable div or a <textarea> depending on version
-    const inputSelector = [
-      '#prompt-textarea',
-      'div[contenteditable="true"][data-id="root"]',
-      'textarea[placeholder]',
-    ].join(", ");
+    const isLoginModal = await page.$('[data-testid="modal-no-auth-login"]');
 
-    const inputEl = await page.waitForSelector(inputSelector, {
-      timeout: INPUT_TIMEOUT,
+    if (isLoginModal) {
+      // throw new Error("❌ NOT LOGGED IN — session expired");
+      console.log("❌ NOT LOGGED IN — session expired");
+      // try to login manually
+      console.log("👉 Login manually, then press ENTER here...");
+      process.stdin.once("data", async () => {
+        await context.storageState({ path: "session.json" });
+        console.log("✅ Session saved!");
+        await browser.close();
+      });
+      await new Promise(resolve => setTimeout(resolve, 60000));
+
+      if (await page.$('[data-testid="modal-no-auth-login"]')) return "❌ NOT LOGGED IN — session expired";
+    }
+
+    // ─────────────── INPUT DETECTION ───────────────
+    log("🔎 Locating input box...");
+
+    const inputEl = page.getByRole("textbox").first();
+
+    await inputEl.waitFor({
       state: "visible",
+      timeout: INPUT_TIMEOUT,
     });
 
-    // ── 3. Type the prompt ──────────────────────────────────────────────────
+    log("✅ Input box found");
+
+    // ─────────────── TYPE PROMPT ───────────────
+    log("⌨️ Typing prompt...");
     await inputEl.click();
-    await inputEl.fill("");           // clear any leftover text
-    await inputEl.type(prompt, { delay: 20 }); // slight delay = more human-like
+    await inputEl.fill("");
+    await inputEl.type(prompt, { delay: 20 });
 
-    // ── 4. Submit ───────────────────────────────────────────────────────────
-    // Try the send button first; fall back to Enter key
-    const sendButtonSelector = [
-      'button[data-testid="send-button"]',
-      'button[aria-label="Send message"]',
-      'button[aria-label="Send prompt"]',
-    ].join(", ");
+    const typedValue = await inputEl.inputValue().catch(() => "N/A");
+    log("📥 Typed value:", typedValue);
 
-    const sendBtn = await page.$(sendButtonSelector);
-    if (sendBtn) {
-      await sendBtn.click();
-    } else {
-      await inputEl.press("Enter");
+    if (!typedValue || typedValue.trim() === "") {
+      throw new Error("❌ Input typing failed");
     }
 
-    // ── 5. Wait for response to complete ───────────────────────────────────
-    const responseText = await waitForCompleteResponse(page);
+    // ─────────────── SEND MESSAGE ───────────────
+    log("📤 Attempting to send message...");
 
-    return formatResponse(responseText);
+    const beforeUrl = page.url();
+
+    const sendBtn = await page.$(
+      'button[data-testid="send-button"], button:has(svg)'
+    );
+
+    if (sendBtn) {
+      log("🟢 Send button found → clicking");
+
+      await Promise.all([
+        page.waitForURL(/\/c\//, { timeout: 10000 }).catch(() => null),
+        sendBtn.click(),
+      ]);
+
+      log("📨 Sent via button");
+    } else {
+      log("🟡 Send button not found → using Enter");
+
+      await Promise.all([
+        page.waitForURL(/\/c\//, { timeout: 10000 }).catch(() => null),
+        inputEl.press("Enter"),
+      ]);
+
+      log("📨 Sent via Enter");
+    }
+
+    const afterUrl = page.url();
+    log("🌐 URL after send:", afterUrl);
+
+    if (beforeUrl !== afterUrl) {
+      log("🔄 Redirect detected");
+
+      await page.waitForLoadState("domcontentloaded");
+      await page.waitForLoadState("networkidle");
+    }
+
+    // 📸 Screenshot for debugging
+    await page.screenshot({ path: "debug_after_send.png" });
+    log("📸 Screenshot saved: debug_after_send.png");
+
+    // ─────────────── VERIFY MESSAGE SENT ───────────────
+    const userMsgCount = await page.$$eval(
+      'div[data-message-author-role="user"]',
+      (nodes) => nodes.length
+    );
+
+    log("👤 User messages on page:", userMsgCount);
+
+    if (userMsgCount === 0) {
+      throw new Error("❌ Message NOT sent (no user message detected)");
+    }
+
+    // ─────────────── WAIT FOR ASSISTANT MESSAGE ───────────────
+    log("⏳ Waiting for assistant message...");
+
+    await page.waitForFunction(() => {
+      return document.querySelectorAll(
+        'div[data-message-author-role="assistant"]'
+      ).length > 0;
+    }, { timeout: 30000 });
+
+    log("✅ Assistant message appeared");
+
+    // ─────────────── EXTRACT RESPONSE ───────────────
+    const response = await waitForCompleteResponse(page);
+
+    log("✅ Final response length:", response.length);
+
+    return response;
+
+  } catch (err) {
+    log("💥 ERROR:", err.message);
+
+    await page.screenshot({ path: "error.png" });
+    log("📸 Error screenshot saved: error.png");
+
+    throw err;
   } finally {
     await context.close();
     await browser.close();
+    log("🧹 Browser closed");
   }
 }
 
-/**
- * Polls the page until ChatGPT has finished generating its response.
- * Strategy: wait for the "Stop generating" button to disappear,
- * then grab the last assistant message block.
- */
+// 🔥 RESPONSE TRACKER WITH LOGGING
 async function waitForCompleteResponse(page) {
-  const stopButtonSelector = [
-    'button[aria-label="Stop generating"]',
-    'button[data-testid="stop-button"]',
-  ].join(", ");
+  const selector = 'div[data-message-author-role="assistant"]';
 
-  const assistantMsgSelector = [
-    '[data-message-author-role="assistant"]',
-    '.markdown.prose',
-    '[class*="agent-turn"] .markdown',
-  ].join(", ");
+  let lastText = "";
+  let stableCount = 0;
 
-  // Wait for the stop button to appear (means generation started)
-  try {
-    await page.waitForSelector(stopButtonSelector, { timeout: 15_000 });
-  } catch {
-    // Sometimes it appears and disappears very fast for short answers — that's fine
-    console.warn("Stop button never appeared; ChatGPT may have responded instantly.");
+  log("📡 Tracking response stream...");
+
+  for (let i = 0; i < 60; i++) {
+    if (page.isClosed()) {
+      throw new Error("Page closed during response");
+    }
+
+    await page.waitForTimeout(1000);
+
+    const text = await page.$$eval(selector, (nodes) =>
+      nodes.map(n => n.innerText.trim()).join("\n\n")
+    );
+
+    log(`🧩 Tick ${i} | Length: ${text.length}`);
+
+    if (!text) continue;
+
+    if (text === lastText) {
+      stableCount++;
+      log("⏸️ No change (stable):", stableCount);
+    } else {
+      stableCount = 0;
+      lastText = text;
+      log("🔄 New content detected");
+    }
+
+    if (stableCount >= 3) {
+      log("✅ Response stabilized");
+      return text;
+    }
   }
 
-  // Wait for the stop button to disappear (means generation finished)
-  await page.waitForFunction(
-    (sel) => !document.querySelector(sel),
-    stopButtonSelector,
-    { timeout: RESPONSE_TIMEOUT }
-  );
-
-  // Extra idle wait — DOM sometimes still updating
-  await page.waitForTimeout(1_000);
-
-  // ── Extract the last assistant message ────────────────────────────────────
-  const text = await page.evaluate((sel) => {
-    const nodes = document.querySelectorAll(sel);
-    if (!nodes.length) return null;
-    // Last element = most recent assistant turn
-    return nodes[nodes.length - 1].innerText.trim();
-  }, assistantMsgSelector);
-
-  if (!text) {
-    throw new Error("Could not extract response text from page.");
-  }
-
-  return text;
-}
-
-/**
- * Light formatting pass on extracted text.
- */
-function formatResponse(raw) {
-  return raw
-    .replace(/\n{3,}/g, "\n\n") // collapse excessive blank lines
-    .trim();
+  log("⚠️ Returning partial response (timeout)");
+  return lastText;
 }
 
 module.exports = { sendMessage };
