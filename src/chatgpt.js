@@ -198,6 +198,12 @@ async function sendMessage(prompt) {
     await page.screenshot({ path: "debug_after_send.png" });
     log("📸 Screenshot saved: debug_after_send.png");
 
+    let maxSec = 30;
+    while(maxSec-- > 0 && !(await page.$('div[data-message-author-role="assistant"]'))) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      log(`⏳ Waiting for response... ${maxSec}s left`);
+    }
+
     // ─────────────── VERIFY MESSAGE SENT ───────────────
     const userMsgCount = await page.$$eval(
       'div[data-message-author-role="user"]',
