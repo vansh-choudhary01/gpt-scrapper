@@ -68,19 +68,53 @@ async function sendMessage(prompt) {
 
     const isLoginModal = await page.$('[data-testid="modal-no-auth-login"]');
 
-    if (isLoginModal) {
-      // throw new Error("❌ NOT LOGGED IN — session expired");
-      console.log("❌ NOT LOGGED IN — session expired");
-      // try to login manually
-      console.log("👉 Login manually, then press ENTER here...");
-      process.stdin.once("data", async () => {
-        await context.storageState({ path: "session.json" });
-        console.log("✅ Session saved!");
-        await browser.close();
-      });
-      await new Promise(resolve => setTimeout(resolve, 60000));
+    // if (isLoginModal) {
+    //   // throw new Error("❌ NOT LOGGED IN — session expired");
+    //   console.log("❌ NOT LOGGED IN — session expired");
+    //   // try to login manually
+    //   console.log("👉 Login manually, then press ENTER here...");
+    //   process.stdin.once("data", async () => {
+    //     await context.storageState({ path: "session.json" });
+    //     console.log("✅ Session saved!");
+    //     await browser.close();
+    //   });
+    //   await new Promise(resolve => setTimeout(resolve, 60000));
 
-      if (await page.$('[data-testid="modal-no-auth-login"]')) return "❌ NOT LOGGED IN — session expired";
+    //   if (await page.$('[data-testid="modal-no-auth-login"]')) return "❌ NOT LOGGED IN — session expired";
+    // }
+
+    if (isLoginModal) {
+      log("❌ NOT LOGGED IN — session expired");
+      log("👉 Login manually in browser...");
+
+      log("👉 Please login manually in the opened browser...");
+
+      // Wait until login modal disappears OR chat UI appears
+      await page.waitForFunction(() => {
+        const loginModal = document.querySelector('[data-testid="modal-no-auth-login"]');
+        const chatInput = document.querySelector('[contenteditable="true"], textarea');
+
+        return !loginModal && chatInput;
+      }, { timeout: 120000 });
+
+      log("✅ Login detected!");
+
+      log("💾 Saving session...");
+
+      await context.storageState({ path: SESSION_PATH });
+
+      log("✅ Session saved at:", SESSION_PATH);
+
+      // 🔁 Reload page with new session
+      await page.reload({ waitUntil: "networkidle" });
+
+      log("🔄 Reloaded after login");
+
+      const stillLoggedOut = await page.$('[data-testid="modal-no-auth-login"]');
+
+      if (stillLoggedOut) {
+        throw new Error("❌ Login failed — session not persisted");
+      }
     }
 
     // ─────────────── INPUT DETECTION ───────────────
@@ -113,29 +147,42 @@ async function sendMessage(prompt) {
 
     const beforeUrl = page.url();
 
-    const sendBtn = await page.$(
-      'button[data-testid="send-button"], button:has(svg)'
-    );
+    // const sendBtn = await page.$(
+    //   'button[data-testid="send-button"], button:has(svg)'
+    // );
 
-    if (sendBtn) {
-      log("🟢 Send button found → clicking");
+    // if (sendBtn) {
+    //   log("🟢 Send button found → clicking");
 
-      await Promise.all([
-        page.waitForURL(/\/c\//, { timeout: 10000 }).catch(() => null),
-        sendBtn.click(),
-      ]);
+    //   await Promise.all([
+    //     page.waitForURL(/\/c\//, { timeout: 10000 }).catch(() => null),
+    //     sendBtn.click(),
+    //   ]);
 
-      log("📨 Sent via button");
-    } else {
-      log("🟡 Send button not found → using Enter");
+    //   log("📨 Sent via button");
+    // } else {
+    //   log("🟡 Send button not found → using Enter");
 
-      await Promise.all([
-        page.waitForURL(/\/c\//, { timeout: 10000 }).catch(() => null),
-        inputEl.press("Enter"),
-      ]);
+    //   await Promise.all([
+    //     page.waitForURL(/\/c\//, { timeout: 10000 }).catch(() => null),
+    //     inputEl.press("Enter"),
+    //   ]);
 
-      log("📨 Sent via Enter");
-    }
+    //   log("📨 Sent via Enter");
+    // }
+
+    log("📤 Sending message via Enter (reliable)...");
+
+    // Ensure focus
+    await inputEl.click();
+
+    // Small delay (important)
+    await page.waitForTimeout(300);
+
+    // Press Enter
+    await inputEl.press("Enter");
+
+    log("📨 Message sent (Enter)");
 
     const afterUrl = page.url();
     log("🌐 URL after send:", afterUrl);
@@ -148,8 +195,8 @@ async function sendMessage(prompt) {
     }
 
     // 📸 Screenshot for debugging
-    await page.screenshot({ path: "debug_after_send.png" });
-    log("📸 Screenshot saved: debug_after_send.png");
+    // await page.screenshot({ path: "debug_after_send.png" });
+    // log("📸 Screenshot saved: debug_after_send.png");
 
     // ─────────────── VERIFY MESSAGE SENT ───────────────
     const userMsgCount = await page.$$eval(
@@ -184,8 +231,8 @@ async function sendMessage(prompt) {
   } catch (err) {
     log("💥 ERROR:", err.message);
 
-    await page.screenshot({ path: "error.png" });
-    log("📸 Error screenshot saved: error.png");
+    // await page.screenshot({ path: "error.png" });
+    // log("📸 Error screenshot saved: error.png");
 
     throw err;
   } finally {
