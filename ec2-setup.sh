@@ -35,8 +35,8 @@ read -p "Press ENTER to continue if DNS is correct..."
 # START NGINX TEMP (HTTP)
 # ========================
 
-echo "==> Starting nginx for SSL challenge..."
-sudo docker-compose up -d nginx
+echo "==> Starting full stack (HTTP only)..."
+sudo docker compose up -d --build
 
 sleep 5
 
@@ -46,16 +46,20 @@ sleep 5
 
 echo "==> Requesting SSL certificate..."
 
-sudo certbot certonly --webroot \
-  -w ./certbot/www \
+sudo docker run --rm \
+  -v $(pwd)/certbot/www:/var/www/certbot \
+  -v /etc/letsencrypt:/etc/letsencrypt \
+  certbot/certbot certonly \
+  --webroot \
+  --webroot-path=/var/www/certbot \
   -d $DOMAIN \
   --email your@email.com \
   --agree-tos \
   --no-eff-email
 
 echo "==> Restarting full stack..."
-sudo docker-compose down
-sudo docker-compose up -d --build
+sudo docker compose down
+sudo docker compose up -d --build
 
 # ========================
 # SESSION STEP
@@ -66,7 +70,7 @@ echo "Copy session file:"
 echo "scp -i key.pem auth/session.json ubuntu@$(curl -s ifconfig.me):~/gpt-scrapper/auth/"
 read -p "Press ENTER after copying..."
 
-sudo docker-compose restart
+sudo docker compose restart
 
 echo ""
 echo "=========================================="
