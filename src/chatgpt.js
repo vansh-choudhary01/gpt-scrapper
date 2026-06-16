@@ -29,7 +29,7 @@ async function sendMessage(prompt) {
   log("🚀 Launching browser...");
 
   const browser = await chromium.launch({
-    headless: false,
+    headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
