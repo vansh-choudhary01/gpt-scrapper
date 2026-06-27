@@ -26,7 +26,7 @@ function ensureSessionExists() {
 async function sendMessage(prompt, onChunk) {
   ensureSessionExists();
 
-  log("🚀 Launching browser...");
+  log("Launching browser...");
 
   const browser = await chromium.launch({
     headless: true,
@@ -39,55 +39,55 @@ async function sendMessage(prompt, onChunk) {
 
   const page = await context.newPage();
 
-  // 🔍 GLOBAL DEBUG LISTENERS
-  page.on("console", (msg) => log("🧠 Browser console:", msg.text()));
+  // GLOBAL DEBUG LISTENERS
+  page.on("console", (msg) => log("Browser console:", msg.text()));
   page.on("requestfailed", (req) =>
-    log("❌ Request failed:", req.url())
+    log("Request failed:", req.url())
   );
   page.on("framenavigated", (frame) => {
     if (frame === page.mainFrame()) {
-      log("🔄 Navigated to:", frame.url());
+      log("Navigated to:", frame.url());
     }
   });
-  page.on("close", () => log("❌ Page closed!"));
+  page.on("close", () => log("Page closed!"));
 
   try {
     // ─────────────── NAVIGATE ───────────────
-    log("🌍 Opening ChatGPT...");
+    log("Opening ChatGPT...");
     await page.goto(CHATGPT_URL, {
       waitUntil: "domcontentloaded",
       timeout: NAVIGATION_TIMEOUT,
     });
 
     await page.waitForLoadState("networkidle");
-    log("✅ Page loaded:", page.url());
+    log("Page loaded:", page.url());
 
     if (page.url().includes("login")) {
-      throw new Error("❌ Not logged in (session expired)");
+      throw new Error("Not logged in (session expired)");
     }
 
     const isLoginModal = await page.$('[data-testid="modal-no-auth-login"]');
 
     // if (isLoginModal) {
-    //   // throw new Error("❌ NOT LOGGED IN — session expired");
-    //   console.log("❌ NOT LOGGED IN — session expired");
+    //   // throw new Error("NOT LOGGED IN — session expired");
+    //   console.log("NOT LOGGED IN — session expired");
     //   // try to login manually
-    //   console.log("👉 Login manually, then press ENTER here...");
+    //   console.log("Login manually, then press ENTER here...");
     //   process.stdin.once("data", async () => {
     //     await context.storageState({ path: "session.json" });
-    //     console.log("✅ Session saved!");
+    //     console.log("Session saved!");
     //     await browser.close();
     //   });
     //   await new Promise(resolve => setTimeout(resolve, 60000));
 
-    //   if (await page.$('[data-testid="modal-no-auth-login"]')) return "❌ NOT LOGGED IN — session expired";
+    //   if (await page.$('[data-testid="modal-no-auth-login"]')) return "NOT LOGGED IN — session expired";
     // }
 
     if (isLoginModal) {
-      log("❌ NOT LOGGED IN — session expired");
-      log("👉 Login manually in browser...");
+      log("NOT LOGGED IN — session expired");
+      log("Login manually in browser...");
 
-      log("👉 Please login manually in the opened browser...");
+      log("Please login manually in the opened browser...");
 
       // Wait until login modal disappears OR chat UI appears
       await page.waitForFunction(() => {
@@ -97,28 +97,28 @@ async function sendMessage(prompt, onChunk) {
         return !loginModal && chatInput;
       }, { timeout: 120000 });
 
-      log("✅ Login detected!");
+      log("Login detected!");
 
-      log("💾 Saving session...");
+      log("Saving session...");
 
       await context.storageState({ path: SESSION_PATH });
 
-      log("✅ Session saved at:", SESSION_PATH);
+      log("Session saved at:", SESSION_PATH);
 
-      // 🔁 Reload page with new session
+      // Reload page with new session
       await page.reload({ waitUntil: "networkidle" });
 
-      log("🔄 Reloaded after login");
+      log("Reloaded after login");
 
       const stillLoggedOut = await page.$('[data-testid="modal-no-auth-login"]');
 
       if (stillLoggedOut) {
-        throw new Error("❌ Login failed — session not persisted");
+        throw new Error("Login failed — session not persisted");
       }
     }
 
     // ─────────────── INPUT DETECTION ───────────────
-    log("🔎 Locating input box...");
+    log("Locating input box...");
 
     const inputEl = page.getByRole("textbox").first();
 
@@ -127,35 +127,35 @@ async function sendMessage(prompt, onChunk) {
       timeout: INPUT_TIMEOUT,
     });
 
-    log("✅ Input box found");
+    log("Input box found");
 
     // ─────────────── TYPE PROMPT ───────────────
-        log("📝 Filling prompt...");
+        log("Filling prompt...");
     await inputEl.click();
-    console.log(" 📝 Prompt length:", prompt.length);
+    console.log(" Prompt length:", prompt.length);
     await inputEl.fill(prompt);
-    console.log("✅ Prompt filled");
+    console.log("Prompt filled");
 
     const typedValue = await inputEl.evaluate((el) => {
       if ("value" in el) return el.value;
       return el.innerText || el.textContent || "";
     });
-    // log("⌨️ Typing prompt...");
+    // log("Typing prompt...");
     // await inputEl.click();
     // await inputEl.fill("");
-    // console.log(" 📝 Prompt length:", prompt.length);
+    // console.log(" Prompt length:", prompt.length);
     // await inputEl.type(prompt, { delay: 0 });
-    // console.log("✅ Prompt typed");
+    // console.log("Prompt typed");
 
     // const typedValue = await inputEl.inputValue().catch(() => "N/A");
-    log("📥 Typed value:", typedValue);
+    log("Typed value:", typedValue);
 
     if (!typedValue || typedValue.trim() === "") {
-      throw new Error("❌ Input typing failed");
+      throw new Error("Input typing failed");
     }
 
     // ─────────────── SEND MESSAGE ───────────────
-    log("📤 Attempting to send message...");
+    log("Attempting to send message...");
 
     const beforeUrl = page.url();
 
@@ -164,26 +164,26 @@ async function sendMessage(prompt, onChunk) {
     // );
 
     // if (sendBtn) {
-    //   log("🟢 Send button found → clicking");
+    //   log("Send button found → clicking");
 
     //   await Promise.all([
     //     page.waitForURL(/\/c\//, { timeout: 10000 }).catch(() => null),
     //     sendBtn.click(),
     //   ]);
 
-    //   log("📨 Sent via button");
+    //   log("Sent via button");
     // } else {
-    //   log("🟡 Send button not found → using Enter");
+    //   log("Send button not found → using Enter");
 
     //   await Promise.all([
     //     page.waitForURL(/\/c\//, { timeout: 10000 }).catch(() => null),
     //     inputEl.press("Enter"),
     //   ]);
 
-    //   log("📨 Sent via Enter");
+    //   log("Sent via Enter");
     // }
 
-    log("📤 Sending message via Enter (reliable)...");
+    log("Sending message via Enter (reliable)...");
 
     // Ensure focus
     await inputEl.click();
@@ -194,26 +194,26 @@ async function sendMessage(prompt, onChunk) {
     // Press Enter
     await inputEl.press("Enter");
 
-    log("📨 Message sent (Enter)");
+    log("Message sent (Enter)");
 
     const afterUrl = page.url();
-    log("🌐 URL after send:", afterUrl);
+    log("URL after send:", afterUrl);
 
     if (beforeUrl !== afterUrl) {
-      log("🔄 Redirect detected");
+      log("Redirect detected");
 
       await page.waitForLoadState("domcontentloaded");
       await page.waitForLoadState("networkidle");
     }
 
-    // 📸 Screenshot for debugging
+    // Screenshot for debugging
     await page.screenshot({ path: "debug_after_send.png" });
-    log("📸 Screenshot saved: debug_after_send.png");
+    log("Screenshot saved: debug_after_send.png");
 
     let maxSec = 30;
     while(maxSec-- > 0 && !(await page.$('div[data-message-author-role="assistant"]'))) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      log(`⏳ Waiting for response... ${maxSec}s left`);
+      log(`Waiting for response... ${maxSec}s left`);
     }
 
     // ─────────────── VERIFY MESSAGE SENT ───────────────
@@ -222,14 +222,14 @@ async function sendMessage(prompt, onChunk) {
       (nodes) => nodes.length
     );
 
-    log("👤 User messages on page:", userMsgCount);
+    log("User messages on page:", userMsgCount);
 
     if (userMsgCount === 0) {
-      throw new Error("❌ Message NOT sent (no user message detected)");
+      throw new Error("Message NOT sent (no user message detected)");
     }
 
     // ─────────────── WAIT FOR ASSISTANT MESSAGE ───────────────
-    log("⏳ Waiting for assistant message...");
+    log("Waiting for assistant message...");
 
     await page.waitForFunction(() => {
       return document.querySelectorAll(
@@ -237,37 +237,37 @@ async function sendMessage(prompt, onChunk) {
       ).length > 0;
     }, { timeout: 30000 });
 
-    log("✅ Assistant message appeared");
+    log("Assistant message appeared");
 
     // ─────────────── EXTRACT RESPONSE ───────────────
     const response = await waitForCompleteResponse(page, onChunk);
 
-    log("✅ Final response length:", response.length);
+    log("Final response length:", response.length);
 
     return response;
 
   } catch (err) {
-    log("💥 ERROR:", err.message);
+    log("ERROR:", err.message);
 
     await page.screenshot({ path: "error.png" });
-    log("📸 Error screenshot saved: error.png");
+    log("Error screenshot saved: error.png");
 
     throw err;
   } finally {
     await context.close();
     await browser.close();
-    log("🧹 Browser closed");
+    log("Browser closed");
   }
 }
 
-// 🔥 RESPONSE TRACKER WITH LOGGING
+// RESPONSE TRACKER WITH LOGGING
 async function waitForCompleteResponse(page, onChunk) {
   const selector = 'div[data-message-author-role="assistant"]';
 
   let lastText = "";
   let stableCount = 0;
 
-  log("📡 Tracking response stream...");
+  log("Tracking response stream...");
 
   for (let i = 0; i < 60; i++) {
     if (page.isClosed()) {
@@ -280,13 +280,13 @@ async function waitForCompleteResponse(page, onChunk) {
       nodes.map(n => n.innerText.trim()).join("\n\n")
     );
 
-    log(`🧩 Tick ${i} | Length: ${text.length}`);
+    log(`Tick ${i} | Length: ${text.length}`);
 
     if (!text) continue;
 
     if (text === lastText) {
       stableCount++;
-      log("⏸️ No change (stable):", stableCount);
+      log("No change (stable):", stableCount);
     } else {
       if (onChunk && text.startsWith(lastText)) {
         onChunk(text.slice(lastText.length));
@@ -295,16 +295,16 @@ async function waitForCompleteResponse(page, onChunk) {
       }
       stableCount = 0;
       lastText = text;
-      log("🔄 New content detected");
+      log("New content detected");
     }
 
     if (stableCount >= 3) {
-      log("✅ Response stabilized");
+      log("Response stabilized");
       return text;
     }
   }
 
-  log("⚠️ Returning partial response (timeout)");
+  log("Returning partial response (timeout)");
   return lastText;
 }
 

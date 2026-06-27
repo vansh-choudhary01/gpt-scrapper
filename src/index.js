@@ -81,9 +81,9 @@ setInterval(async () => {
     });
     const page = await context.newPage();
     await page.goto("https://chatgpt.com/");
-    console.log("🟢 Session refreshed");
+    console.log("Session refreshed");
     await page.close();
   } catch (e) {
-    console.log("⚠️ Keep-alive failed: ", e);
+    console.log("Keep-alive failed: ", e);
   }
 }, 5 * 60 * 1000); // every 5 min

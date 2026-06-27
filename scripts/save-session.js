@@ -40,7 +40,7 @@ async function main() {
     waitUntil: "domcontentloaded",
   });
 
-  console.log("🧠 Waiting for REAL login (strict check)...");
+  console.log("Waiting for REAL login (strict check)...");
 
   let loggedIn = false;
 
@@ -55,19 +55,19 @@ async function main() {
       'button:has-text("Log in"), a:has-text("Log in")'
     );
 
-    console.log("🔍 URL:", url);
-    console.log("➡️ inputBox:", !!inputBox);
-    console.log("➡️ loginButton:", !!loginButton);
+    console.log("URL:", url);
+    console.log("inputBox:", !!inputBox);
+    console.log("loginButton:", !!loginButton);
 
-    // 🔥 STRICT CONDITION
+    // STRICT CONDITION
     if (inputBox && !loginButton && !url.includes("/auth")) {
-      console.log("✅ Fully logged in!");
+      console.log("Fully logged in!");
       loggedIn = true;
       break;
     }
 
-    console.log("⏳ Still not logged in...");
-    console.log("👉 Complete login in browser");
+    console.log("Still not logged in...");
+    console.log("Complete login in browser");
 
     await page.waitForTimeout(3000);
   }
@@ -77,12 +77,12 @@ async function main() {
 
   await context.storageState({ path: SESSION_PATH });
 
-  console.log(`\n✅ Session saved to: ${SESSION_PATH}`);
+  console.log(`\nSession saved to: ${SESSION_PATH}`);
 
   await browser.close();
 }
 
 main().catch((err) => {
-  console.error("❌ Error:", err.message);
+  console.error("Error:", err.message);
   process.exit(1);
 });

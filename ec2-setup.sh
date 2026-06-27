@@ -26,7 +26,7 @@ mkdir -p certbot/www
 mkdir -p certbot/conf
 
 echo ""
-echo "⚠️ Make sure domain points to this server:"
+echo "Make sure domain points to this server:"
 echo "chat.naaspeeti.xyz → $(curl -s ifconfig.me)"
 echo ""
 read -p "Press ENTER to continue if DNS is correct..."
@@ -74,8 +74,8 @@ sudo docker compose restart
 
 echo ""
 echo "=========================================="
-echo "✅ HTTPS READY 🚀"
+echo "HTTPS READY"
 echo ""
-echo "🌐 https://$DOMAIN/chat"
+echo "https://$DOMAIN/chat"
 echo ""
 echo "=========================================="
