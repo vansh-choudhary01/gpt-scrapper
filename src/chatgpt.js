@@ -23,7 +23,7 @@ function ensureSessionExists() {
   }
 }
 
-async function sendMessage(prompt) {
+async function sendMessage(prompt, onChunk) {
   ensureSessionExists();
 
   log("🚀 Launching browser...");
@@ -130,12 +130,24 @@ async function sendMessage(prompt) {
     log("✅ Input box found");
 
     // ─────────────── TYPE PROMPT ───────────────
-    log("⌨️ Typing prompt...");
+        log("📝 Filling prompt...");
     await inputEl.click();
-    await inputEl.fill("");
-    await inputEl.type(prompt, { delay: 20 });
+    console.log(" 📝 Prompt length:", prompt.length);
+    await inputEl.fill(prompt);
+    console.log("✅ Prompt filled");
 
-    const typedValue = await inputEl.inputValue().catch(() => "N/A");
+    const typedValue = await inputEl.evaluate((el) => {
+      if ("value" in el) return el.value;
+      return el.innerText || el.textContent || "";
+    });
+    // log("⌨️ Typing prompt...");
+    // await inputEl.click();
+    // await inputEl.fill("");
+    // console.log(" 📝 Prompt length:", prompt.length);
+    // await inputEl.type(prompt, { delay: 0 });
+    // console.log("✅ Prompt typed");
+
+    // const typedValue = await inputEl.inputValue().catch(() => "N/A");
     log("📥 Typed value:", typedValue);
 
     if (!typedValue || typedValue.trim() === "") {
@@ -228,7 +240,7 @@ async function sendMessage(prompt) {
     log("✅ Assistant message appeared");
 
     // ─────────────── EXTRACT RESPONSE ───────────────
-    const response = await waitForCompleteResponse(page);
+    const response = await waitForCompleteResponse(page, onChunk);
 
     log("✅ Final response length:", response.length);
 
@@ -249,7 +261,7 @@ async function sendMessage(prompt) {
 }
 
 // 🔥 RESPONSE TRACKER WITH LOGGING
-async function waitForCompleteResponse(page) {
+async function waitForCompleteResponse(page, onChunk) {
   const selector = 'div[data-message-author-role="assistant"]';
 
   let lastText = "";
@@ -276,6 +288,11 @@ async function waitForCompleteResponse(page) {
       stableCount++;
       log("⏸️ No change (stable):", stableCount);
     } else {
+      if (onChunk && text.startsWith(lastText)) {
+        onChunk(text.slice(lastText.length));
+      } else if (onChunk && text !== lastText) {
+        onChunk(text);
+      }
       stableCount = 0;
       lastText = text;
       log("🔄 New content detected");

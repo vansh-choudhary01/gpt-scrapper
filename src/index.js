@@ -28,13 +28,21 @@ app.post("/chat", async (req, res) => {
 
   console.log(`[${new Date().toISOString()}] Received prompt: "${prompt.slice(0, 80)}..."`);
 
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
   try {
-    const response = await sendMessage(prompt.trim());
-    console.log(`[${new Date().toISOString()}] Response received (${response.length} chars)`);
-    res.json({ success: true, response });
+    await sendMessage(prompt.trim(), (chunk) => {
+      res.write(`${JSON.stringify({text: chunk})}\n\n`);
+    });
+    // res.write(`${JSON.stringify({ done: true })}\n\n`);
   } catch (err) {
     console.error(`[${new Date().toISOString()}] Error:`, err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.write(`${JSON.stringify({ error: err.message })}\n\n`);
+  } finally {
+    res.end();
   }
 });
 
