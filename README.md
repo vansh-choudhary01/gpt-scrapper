@@ -1,4 +1,4 @@
-# ChatGPT Scraper Backend
+# LLM Scraper Backend
 
 A TypeScript/Node.js/Express API that drives a real Chromium browser via Playwright to interact with ChatGPT and DeepSeek — no official API key needed.
 
