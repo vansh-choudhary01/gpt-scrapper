@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "save-session": "node scripts/save-session.js"
+    "login-chatgpt": "node scripts/chatgpt-save-session.js",
+    "login-deepseek": "node scripts/deepseek-save-session.js"
   },
   "dependencies": {
     "express": "^4.18.2",

@@ -1,14 +1,15 @@
 require("dotenv").config();
 const express = require("express");
-const { sendMessage } = require("./chatgpt");
 const path = require("path");
 const { chromium } = require("playwright-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+const { chatGptCompletions } = require("./chatgpt");
+const { deepseekCompletions } = require("./deepseek");
 
 const app = express();
 app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // Health check
 app.get("/health", (req, res) => {
@@ -17,12 +18,19 @@ app.get("/health", (req, res) => {
 
 // Main chat endpoint
 app.post("/chat", async (req, res) => {
-  const { prompt } = req.body;
+  const { prompt, provider = "deepseek" } = req.body;
 
   if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
     return res.status(400).json({
       success: false,
       error: "prompt is required and must be a non-empty string",
+    });
+  }
+
+  if (!provider || (provider !== "chatgpt" && provider !== "deepseek")) {
+    return res.status(400).json({
+      success: false,
+      error: "provider is required and must be either 'chatgpt' or 'deepseek'",
     });
   }
 
@@ -34,10 +42,20 @@ app.post("/chat", async (req, res) => {
   res.flushHeaders();
 
   try {
-    await sendMessage(prompt.trim(), (chunk) => {
-      res.write(`${JSON.stringify({text: chunk})}\n\n`);
-    });
-    // res.write(`${JSON.stringify({ done: true })}\n\n`);
+    if (provider === "chatgpt") {
+      await chatGptCompletions(prompt.trim(), (chunk) => {
+        res.write(`${JSON.stringify({ text: chunk })}\n\n`);
+      });
+    } else if (provider === "deepseek") {
+      await deepseekCompletions(prompt.trim(), (chunk) => {
+        res.write(`${JSON.stringify({ text: chunk })}\n\n`);
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: "Invalid provider. Must be 'chatgpt' or 'deepseek'.",
+      });
+    }
   } catch (err) {
     console.error(`[${new Date().toISOString()}] Error:`, err.message);
     res.write(`${JSON.stringify({ error: err.message })}\n\n`);
@@ -47,7 +65,7 @@ app.post("/chat", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`ChatGPT scraper backend running on port ${PORT}`);
+  console.log(`LLM scraper backend running on port ${PORT}`);
 });
 
 // const { chromium } = require("playwright");
@@ -70,7 +88,7 @@ app.listen(PORT, () => {
 
 setInterval(async () => {
   try {
-    const SESSION_PATH = path.resolve(__dirname, "../auth/session.json");
+    const SESSION_PATH = path.resolve(__dirname, "../auth/chatGptSession.json");
     const browser = await chromium.launch({
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],

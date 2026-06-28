@@ -5,7 +5,7 @@ const fs = require("fs");
 
 chromium.use(StealthPlugin());
 
-const SESSION_PATH = path.resolve(__dirname, "../auth/session.json");
+const SESSION_PATH = path.resolve(__dirname, "../auth/chatGptSession.json");
 const CHATGPT_URL = "https://chatgpt.com";
 
 // Timeouts
@@ -23,7 +23,7 @@ function ensureSessionExists() {
   }
 }
 
-async function sendMessage(prompt, onChunk) {
+async function chatGptCompletions(prompt, onChunk) {
   ensureSessionExists();
 
   log("Launching browser...");
@@ -308,4 +308,4 @@ async function waitForCompleteResponse(page, onChunk) {
   return lastText;
 }
 
-module.exports = { sendMessage };
+module.exports = { chatGptCompletions };
