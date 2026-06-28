@@ -7,13 +7,16 @@ A TypeScript/Node.js/Express API that drives a real Chromium browser via Playwri
 ## How it works
 
 ```
-POST /chat { "prompt": "...", "provider": "chatgpt" | "deepseek" }
+POST /chat { "prompt": "...", "provider": "chatgpt" | "deepseek", "metadata": { ... } }
         │
         ▼
   Playwright launches headless Chromium
         │
         ▼
   Loads chatgpt.com or chat.deepseek.com with your saved session (cookies)
+        │
+        ▼
+  Configures DeepSeek model type & tools (DeepThink / Search) from metadata
         │
         ▼
   Types the prompt → submits → streams response chunks via SSE
@@ -76,9 +79,9 @@ npm run build   # compiles TypeScript → dist/
 npm start       # runs dist/index.js
 ```
 
-For development (no build step):
+For development (auto-restarts on file changes):
 ```bash
-npm run dev     # runs via ts-node
+npm run dev     # runs via nodemon + ts-node
 ```
 
 Or as a persistent background service:
@@ -105,11 +108,24 @@ sudo journalctl -u chatgpt-scraper -f   # view logs
 ```json
 {
   "prompt": "Explain recursion in one paragraph.",
-  "provider": "deepseek"
+  "provider": "deepseek",
+  "metadata": {
+    "modelType": "instant",
+    "allowedTools": ["Search"]
+  }
 }
 ```
 
 `provider` is optional, defaults to `"deepseek"`. Accepted values: `"chatgpt"` | `"deepseek"`.
+
+`metadata` is optional (DeepSeek only), defaults to `{ modelType: "instant", allowedTools: ["Search"] }`.
+
+**metadata fields:**
+
+| Field | Type | Values | Description |
+|---|---|---|---|
+| `modelType` | string | `"instant"` \| `"reasoning"` \| `"vision"` | DeepSeek model to use |
+| `allowedTools` | array | `"Search"`, `"DeepThink"` | Tools to enable for the request |
 
 **Response** (streamed, newline-delimited JSON):
 ```
