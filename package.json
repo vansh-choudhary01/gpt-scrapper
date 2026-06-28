@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
+    "dev": "nodemon --exec ts-node  src/index.ts",
     "login-chatgpt": "ts-node scripts/chatgpt-save-session.ts",
     "login-deepseek": "ts-node scripts/deepseek-save-session.ts"
   },

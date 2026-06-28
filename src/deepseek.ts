@@ -2,7 +2,8 @@ import { chromium } from "playwright-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import path from "path";
 import fs from "fs";
-import { Page } from "playwright";
+import { Locator, Page } from "playwright";
+import { ChatRequest } from ".";
 
 chromium.use(StealthPlugin());
 
@@ -23,7 +24,15 @@ function ensureSessionExists(): void {
   }
 }
 
-export async function deepseekCompletions(prompt: string, onChunk: (chunk: string) => void): Promise<string> {
+async function findLocatorByHTML(locators: Locator[], text: string): Promise<Locator | undefined> {
+  for (const el of locators) {
+    const html = await el.innerHTML();
+    if (html.includes(text)) return el;
+  }
+  return undefined;
+}
+
+export async function deepseekCompletions(prompt: string, onChunk: (chunk: string) => void, metadata?: ChatRequest["metadata"]): Promise<string> {
   ensureSessionExists();
 
   log("Launching browser...");
@@ -64,6 +73,46 @@ export async function deepseekCompletions(prompt: string, onChunk: (chunk: strin
     await inputEl.waitFor({ state: "visible", timeout: INPUT_TIMEOUT });
     log("Input box found");
 
+    const models = ["instant", "reasoning", "vision"];
+
+    const modelDivs = await page.locator('div[class*="_9f2341b _18572c1"]').all();
+    const toolDivs = await page.locator('div[class*="f79352dc ds-toggle-button ds-toggle-button--m"]').all();
+
+    async function toolSelection(button: Locator | undefined, allowedTool: boolean | undefined, type: "tool" | "model") {
+      if (!button) {
+        log("Tool button not found");
+        throw new Error("Tool button not found");
+      }
+
+      const isPressed = await button.getAttribute(type === "tool" ? "aria-pressed": "aria-checked");
+
+      if (allowedTool && isPressed === "false") {
+        log("Activating button...");
+        await button.click();
+      } else if (!allowedTool && isPressed === "true") {
+        log("Deactivating button...");
+        await button.click();
+      } else {
+        log("Button state already correct");
+      }
+    }
+
+    // ── Tool buttons ──
+    const deepThinkButton = await findLocatorByHTML(toolDivs, "DeepThink");
+    const searchButton = await findLocatorByHTML(toolDivs, "Search");
+
+    const allowedDeepThink = metadata?.allowedTools?.includes("DeepThink");
+    const allowedSearch = metadata?.allowedTools?.includes("Search");
+
+    await toolSelection(deepThinkButton, allowedDeepThink, "tool");
+    await toolSelection(searchButton, allowedSearch, "tool");
+
+    // ── Model button ──
+    const modelTypeButtonIndex = models.indexOf(metadata?.modelType ?? "instant");
+    const modelTypeButton = modelDivs[modelTypeButtonIndex];
+
+    await toolSelection(modelTypeButton, modelTypeButtonIndex !== -1, "model");
+    await page.waitForTimeout(5000);
     log("Typing prompt...");
     await inputEl.click();
     await inputEl.fill(prompt);
@@ -84,7 +133,7 @@ export async function deepseekCompletions(prompt: string, onChunk: (chunk: strin
       log("Sent via Enter key");
     }
 
-    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForLoadState("networkidle").catch(() => { });
     await page.screenshot({ path: "debug_after_send.png" });
 
     log("Waiting for assistant response...");
@@ -97,7 +146,7 @@ export async function deepseekCompletions(prompt: string, onChunk: (chunk: strin
 
   } catch (err) {
     log("ERROR:", (err as Error).message);
-    await page.screenshot({ path: "error.png" }).catch(() => {});
+    await page.screenshot({ path: "error.png" }).catch(() => { });
     throw err;
   } finally {
     await context.close();
@@ -121,7 +170,8 @@ async function waitForCompleteResponse(page: Page, onChunk: (chunk: string) => v
     const isGenerating = await page.evaluate(() => {
       const stopBtn = document.querySelector('[class*="stop"], button[aria-label*="Stop"], button[aria-label*="stop"]');
       const thinkingChain = document.querySelector('[class*="e1675d8b"]');
-      return !!(stopBtn || thinkingChain);
+      const thinkingStopedChain = document.querySelector('[class*="_5ab5d64"]');
+      return !!(stopBtn || (thinkingChain && !thinkingStopedChain));
     }).catch(() => false);
 
     const text = await page.$$eval(ANSWER_SEL, (nodes: Element[]) => {
