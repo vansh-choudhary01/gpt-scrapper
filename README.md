@@ -1,25 +1,25 @@
 # ChatGPT Scraper Backend
 
-A Node.js/Express API that drives a real Chromium browser via Playwright to interact with ChatGPT — no official API key needed.
+A TypeScript/Node.js/Express API that drives a real Chromium browser via Playwright to interact with ChatGPT and DeepSeek — no official API key needed.
 
 ---
 
 ## How it works
 
 ```
-POST /chat { "prompt": "..." }
+POST /chat { "prompt": "...", "provider": "chatgpt" | "deepseek" }
         │
         ▼
   Playwright launches headless Chromium
         │
         ▼
-  Loads chatgpt.com with your saved session (cookies)
+  Loads chatgpt.com or chat.deepseek.com with your saved session (cookies)
         │
         ▼
-  Types the prompt → submits → waits for full response
+  Types the prompt → submits → streams response chunks via SSE
         │
         ▼
-  Extracts & returns { "success": true, "response": "..." }
+  Returns streamed { "text": "..." } chunks (newline-delimited JSON)
 ```
 
 ---
@@ -30,12 +30,13 @@ You need a machine with a screen (your laptop) for this step.
 
 ```bash
 npm install
-npm run save-session
+npm run login-chatgpt    # saves auth/chatGptSession.json
+npm run login-deepseek   # saves auth/deepseekSession.json
 ```
 
-A browser window opens. Log in to ChatGPT normally (email/password, Google, etc.). Once you're on the main chat page, press **Enter** in the terminal. This saves `auth/session.json`.
+A browser window opens. Log in normally. The script auto-detects login and saves the session.
 
-> **Keep session.json secret** — it contains your login cookies.
+> **Keep session files secret** — they contain your login cookies.
 
 ---
 
@@ -59,18 +60,25 @@ bash scripts/ec2-setup.sh
 
 ---
 
-## Step 3 — Upload session.json to EC2
+## Step 3 — Upload session files to EC2
 
 ```bash
-scp -i your-key.pem auth/session.json ubuntu@<EC2_IP>:~/chatgpt-scraper/auth/
+scp -i your-key.pem auth/chatGptSession.json ubuntu@<EC2_IP>:~/chatgpt-scraper/auth/
+scp -i your-key.pem auth/deepseekSession.json ubuntu@<EC2_IP>:~/chatgpt-scraper/auth/
 ```
 
 ---
 
-## Step 4 — Start the server
+## Step 4 — Build and start the server
 
 ```bash
-npm start
+npm run build   # compiles TypeScript → dist/
+npm start       # runs dist/index.js
+```
+
+For development (no build step):
+```bash
+npm run dev     # runs via ts-node
 ```
 
 Or as a persistent background service:
@@ -95,23 +103,41 @@ sudo journalctl -u chatgpt-scraper -f   # view logs
 
 **Request:**
 ```json
-{ "prompt": "Explain recursion in one paragraph." }
-```
-
-**Response:**
-```json
 {
-  "success": true,
-  "response": "Recursion is a technique where a function calls itself..."
+  "prompt": "Explain recursion in one paragraph.",
+  "provider": "deepseek"
 }
 ```
 
-**Error (session expired):**
-```json
-{
-  "success": false,
-  "error": "Session expired or invalid. Re-run: npm run save-session"
-}
+`provider` is optional, defaults to `"deepseek"`. Accepted values: `"chatgpt"` | `"deepseek"`.
+
+**Response** (streamed, newline-delimited JSON):
+```
+{"text":"Recursion is"}
+{"text":" a technique..."}
+```
+
+**Error:**
+```
+{"error":"Not logged in (session expired)"}
+```
+
+---
+
+## Project Structure
+
+```
+src/
+  index.ts        # Express server & keep-alive
+  chatgpt.ts      # ChatGPT browser automation
+  deepseek.ts     # DeepSeek browser automation
+scripts/
+  chatgpt-save-session.ts
+  deepseek-save-session.ts
+auth/
+  chatGptSession.json   # (git-ignored)
+  deepseekSession.json  # (git-ignored)
+dist/             # compiled output (after npm run build)
 ```
 
 ---
@@ -121,21 +147,23 @@ sudo journalctl -u chatgpt-scraper -f   # view logs
 | Problem | Fix |
 |---|---|
 | OOM kill on t2.micro | Add 2GB swap (see Step 2) or upgrade to t3.small |
-| "Session expired" error | Re-run `npm run save-session` locally, re-upload session.json |
+| "Session expired" error | Re-run `npm run login-chatgpt` or `npm run login-deepseek`, re-upload session file |
 | Chromium not found | Run `npx playwright install chromium` |
-| Response times out | ChatGPT was slow; increase `RESPONSE_TIMEOUT` in `src/chatgpt.js` |
-| Selector not found | ChatGPT updated their UI; update selectors in `waitForCompleteResponse()` |
+| Response times out | Increase `RESPONSE_TIMEOUT` in `src/chatgpt.ts` or `src/deepseek.ts` |
+| Selector not found | Provider updated their UI; update selectors in `waitForCompleteResponse()` |
+| TypeScript errors | Run `npx tsc --noEmit` to check; ensure `npm install` was run |
 
 ---
 
 ## EC2 Security Group
 
-Make sure port **3000** (or your `PORT`) is open in your EC2 security group inbound rules, or put an Nginx reverse proxy in front.
+Make sure port **8080** (or your `PORT`) is open in your EC2 security group inbound rules, or put an Nginx reverse proxy in front.
 
 ---
 
 ## Notes
 
 - Each request spins up a fresh Chromium instance and tears it down after. This is slower (~5–10s overhead) but avoids state leaking between requests.
+- A keep-alive interval refreshes the ChatGPT session every 5 minutes to prevent cookie expiry.
 - If you need concurrency, you can pool browser instances, but be careful about memory on small instances.
-- ChatGPT's DOM selectors may change with UI updates. If things break, inspect the page and update the selectors in `src/chatgpt.js`.
+- Provider DOM selectors may change with UI updates. If things break, inspect the page and update the selectors in `src/chatgpt.ts` or `src/deepseek.ts`.
