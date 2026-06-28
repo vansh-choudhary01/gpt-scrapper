@@ -16,9 +16,18 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+// modelType = {
+// instant: "Instant responses for daily conversations"
+// reasoning: "For complex problems, limited resource, no search or file uploads."
+// vision: "Image understanding"
+
+// toolType = {
+// Search: "Search the web for information"
+// DeepThink: "Think before responding to solve reasoning problems"
+
 // Main chat endpoint
 app.post("/chat", async (req, res) => {
-  const { prompt, provider = "deepseek" } = req.body;
+  const { prompt, provider = "deepseek", metadata = {}} = req.body;
 
   if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
     return res.status(400).json({
