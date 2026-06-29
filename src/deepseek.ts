@@ -112,7 +112,6 @@ export async function deepseekCompletions(prompt: string, onChunk: (chunk: strin
     const modelTypeButton = modelDivs[modelTypeButtonIndex];
 
     await toolSelection(modelTypeButton, modelTypeButtonIndex !== -1, "model");
-    await page.waitForTimeout(5000);
     log("Typing prompt...");
     await inputEl.click();
     await inputEl.fill(prompt);
@@ -162,10 +161,13 @@ async function waitForCompleteResponse(page: Page, onChunk: (chunk: string) => v
 
   log("Tracking response stream...");
 
-  for (let i = 0; i < 120; i++) {
+  const totalWaitTime = 120;
+  const speed = 1;
+
+  for (let i = 0; i < totalWaitTime; i++) {
     if (page.isClosed()) throw new Error("Page closed during response");
 
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1000 / speed);
 
     const isGenerating = await page.evaluate(() => {
       const stopBtn = document.querySelector('[class*="stop"], button[aria-label*="Stop"], button[aria-label*="stop"]');
@@ -192,7 +194,7 @@ async function waitForCompleteResponse(page: Page, onChunk: (chunk: string) => v
       log("No change (stable):", stableCount);
     }
 
-    if (stableCount >= 3 && !isGenerating) {
+    if (stableCount >= 3 * speed && !isGenerating) {
       log("Response stabilized");
       return text;
     }

@@ -72,7 +72,7 @@ app.post("/chat", async (req: Request, res: Response) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
-  const onChunk = (chunk: string) => res.write(`${JSON.stringify({ text: chunk })}\n\n`);
+  const onChunk = (chunk: string) => res.write(`${JSON.stringify({ text: chunk })}\x1E`);
 
   try {
     if (provider === "chatgpt") {
